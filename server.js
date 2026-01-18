@@ -201,8 +201,9 @@ app.get('/api/payment/status/:paymentId', (req, res) => {
 // Webhook для Telegram (обработка нажатий кнопок)
 // ============================================
 app.post('/api/telegram/webhook', async (req, res) => {
-    const { callback_query } = req.body;
+    const { callback_query, message } = req.body;
     
+    // Обработка кнопок оплаты
     if (callback_query) {
         const callbackData = callback_query.data;
         const messageId = callback_query.message.message_id;
@@ -230,6 +231,53 @@ app.post('/api/telegram/webhook', async (req, res) => {
                 
                 // Отвечаем на callback
                 await answerCallback(callback_query.id, '❌ Платеж отклонен!');
+            }
+        }
+    }
+    
+    // Обработка ответов в чат
+    if (message && message.reply_to_message) {
+        const replyText = message.text;
+        const originalMessage = message.reply_to_message.text || '';
+        
+        // Извлекаем ID сессии из оригинального сообщения
+        const sessionIdMatch = originalMessage.match(/ID сессии:<\/b> <code>([^<]+)<\/code>/);
+        const altMatch = originalMessage.match(/ID сессии:.*?(\S+)/);
+        const shortId = sessionIdMatch ? sessionIdMatch[1] : (altMatch ? altMatch[1] : null);
+        
+        if (shortId && replyText) {
+            // Ищем сессию по короткому ID
+            let foundSessionId = null;
+            for (const [sessionId, session] of chatSessions) {
+                if (sessionId.startsWith(shortId) || sessionId.includes(shortId)) {
+                    foundSessionId = sessionId;
+                    break;
+                }
+            }
+            
+            if (foundSessionId) {
+                // Добавляем ответ в очередь
+                if (!pendingReplies.has(foundSessionId)) {
+                    pendingReplies.set(foundSessionId, []);
+                }
+                
+                pendingReplies.get(foundSessionId).push({
+                    text: replyText,
+                    time: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                });
+                
+                console.log(`💬 Ответ в чат ${shortId}: ${replyText.substring(0, 50)}...`);
+                
+                // Подтверждение в Telegram
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: message.chat.id,
+                        text: `✅ Ответ отправлен клиенту`,
+                        reply_to_message_id: message.message_id
+                    })
+                });
             }
         }
     }

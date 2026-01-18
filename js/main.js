@@ -623,10 +623,18 @@ function openCheckout() {
     }
     
     closeCart();
-    document.getElementById('checkoutModal').classList.add('active');
+    const checkoutModal = document.getElementById('checkoutModal');
+    checkoutModal.classList.add('active');
     document.body.style.overflow = 'hidden';
     goToStep(1);
     updateCheckoutSummary();
+    
+    // Scroll to top
+    setTimeout(() => {
+        const modalContent = checkoutModal.querySelector('.checkout-content');
+        if (modalContent) modalContent.scrollTop = 0;
+        checkoutModal.scrollTop = 0;
+    }, 50);
 }
 
 function closeCheckout() {
@@ -654,6 +662,13 @@ function goToStep(step) {
     checkoutModal.querySelectorAll('.checkout-step-content').forEach((el, index) => {
         el.classList.toggle('hidden', index + 1 !== step);
     });
+    
+    // Scroll to top of checkout modal
+    const modalContent = checkoutModal.querySelector('.checkout-content');
+    if (modalContent) {
+        modalContent.scrollTop = 0;
+    }
+    checkoutModal.scrollTop = 0;
     
     // Update summary on step 2
     if (step === 2) {
@@ -1506,6 +1521,16 @@ function reopenCheckoutForRetry() {
             
             // Update checkout summary
             updateCheckoutSummary();
+            
+            // Scroll to top of checkout
+            setTimeout(() => {
+                const modalContent = checkoutModal.querySelector('.checkout-content');
+                if (modalContent) {
+                    modalContent.scrollTop = 0;
+                }
+                checkoutModal.scrollTop = 0;
+                window.scrollTo(0, 0);
+            }, 50);
         }
     }, 100);
 }
