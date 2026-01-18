@@ -240,18 +240,34 @@ app.post('/api/telegram/webhook', async (req, res) => {
         const replyText = message.text;
         const originalMessage = message.reply_to_message.text || '';
         
-        // Извлекаем ID сессии из оригинального сообщения
-        const sessionIdMatch = originalMessage.match(/ID сессии:<\/b> <code>([^<]+)<\/code>/);
-        const altMatch = originalMessage.match(/ID сессии:.*?(\S+)/);
-        const shortId = sessionIdMatch ? sessionIdMatch[1] : (altMatch ? altMatch[1] : null);
+        console.log('📨 Получен ответ на сообщение:', originalMessage.substring(0, 150));
         
-        if (shortId && replyText) {
-            // Ищем сессию по короткому ID
+        // Извлекаем ID сессии из оригинального сообщения (plain text формат)
+        // Формат: "🔑 ID: chat_1234567890_abc123def"
+        const sessionMatch = originalMessage.match(/ID[:\s]+(chat_[a-zA-Z0-9_]+)/i);
+        const foundId = sessionMatch ? sessionMatch[1] : null;
+        
+        console.log('🔍 Найден ID:', foundId);
+        
+        if (foundId && replyText) {
+            console.log('📋 Всего сессий:', chatSessions.size);
+            
+            // Ищем сессию по ID
             let foundSessionId = null;
-            for (const [sessionId, session] of chatSessions) {
-                if (sessionId.startsWith(shortId) || sessionId.includes(shortId)) {
-                    foundSessionId = sessionId;
-                    break;
+            
+            // Сначала проверяем точное совпадение
+            if (chatSessions.has(foundId)) {
+                foundSessionId = foundId;
+                console.log('  ✅ Точное совпадение:', foundSessionId);
+            } else {
+                // Ищем частичное совпадение
+                for (const [sessionId, session] of chatSessions) {
+                    console.log('  Проверяем:', sessionId);
+                    if (sessionId === foundId || sessionId.includes(foundId) || foundId.includes(sessionId)) {
+                        foundSessionId = sessionId;
+                        console.log('  ✅ Найдена сессия:', foundSessionId);
+                        break;
+                    }
                 }
             }
             
@@ -266,7 +282,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
                     time: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
                 });
                 
-                console.log(`💬 Ответ в чат ${shortId}: ${replyText.substring(0, 50)}...`);
+                console.log(`💬 Ответ в чат ${foundSessionId}: ${replyText.substring(0, 50)}...`);
                 
                 // Подтверждение в Telegram
                 await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -275,6 +291,18 @@ app.post('/api/telegram/webhook', async (req, res) => {
                     body: JSON.stringify({
                         chat_id: message.chat.id,
                         text: `✅ Ответ отправлен клиенту`,
+                        reply_to_message_id: message.message_id
+                    })
+                });
+            } else {
+                console.log('❌ Сессия не найдена для ID:', foundId);
+                // Сообщаем в Telegram что сессия не найдена
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: message.chat.id,
+                        text: `⚠️ Клиент уже закрыл чат или сессия истекла`,
                         reply_to_message_id: message.message_id
                     })
                 });
@@ -516,12 +544,11 @@ app.get('/api/chat/check/:sessionId', (req, res) => {
 
 // Отправка чат-сообщения в Telegram
 async function sendChatToTelegram(sessionId, message, userInfo, session) {
-    const shortId = sessionId.substring(0, 12);
-    
+    // Используем полный sessionId для точного сопоставления
     const text = `
 💬 <b>НОВОЕ СООБЩЕНИЕ</b>
 
-👤 <b>ID сессии:</b> <code>${shortId}</code>
+🔑 <b>ID:</b> <code>${sessionId}</code>
 
 📝 <b>Сообщение:</b>
 ${message}
