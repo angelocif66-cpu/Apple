@@ -373,7 +373,10 @@ async function answerCallback(callbackId, text) {
 // Установка webhook для Telegram
 // ============================================
 app.get('/api/telegram/setup-webhook', async (req, res) => {
-    const webhookUrl = `${req.protocol}://${req.get('host')}/api/telegram/webhook`;
+    // Force HTTPS for production (Railway uses reverse proxy)
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.get('host');
+    const webhookUrl = `https://${host}/api/telegram/webhook`;
     
     try {
         const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
